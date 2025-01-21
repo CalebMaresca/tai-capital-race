@@ -1,0 +1,5 @@
+numpy>=1.21.0
+matplotlib>=3.4.0
+pathlib>=1.0.1
+dataclasses>=0.6
+typing>=3.7.4
