@@ -83,7 +83,9 @@ class TransitionPathVisualizer:
                        variables: List[VALID_VARIABLES],
                        selected_paths: Optional[List[int]] = None,
                        time_periods: Optional[int] = None,
-                       figsize: tuple = (15, 5)) -> plt.Figure:
+                       titles: Optional[List[str]] = None,
+                       figsize: Optional[tuple] = None,
+                       shared_y_range: bool = False) -> plt.Figure:
         """
         Plot multiple variables side by side for comparison.
         
@@ -91,11 +93,32 @@ class TransitionPathVisualizer:
             variables: List of variables to compare
             selected_paths: List of path indices to plot. If None, plots all paths
             time_periods: Number of time periods to plot. If None, plots all periods
+            titles: Optional list of custom titles for each subplot
             figsize: Figure size as (width, height)
+            shared_y_range: If True, all subplots will share the same y-axis range
         """
         n_vars = len(variables)
+        if figsize is None:
+            figsize = (5 * n_vars, 5)
         fig = plt.figure(figsize=figsize)
-        
+
+        if shared_y_range:
+            global_min = float('inf')
+            global_max = float('-inf')
+            for var in variables:
+                data = getattr(self.paths, var)
+                paths_to_plot = selected_paths or range(data.shape[0])
+                t_max = time_periods or data.shape[1]
+                for i in paths_to_plot:
+                    values = data[i, :t_max]
+                    global_min = min(global_min, values.min())
+                    global_max = max(global_max, values.max())
+            
+            # Add 5% padding on each end
+            y_range = global_max - global_min
+            global_min -= 0.05 * y_range
+            global_max += 0.05 * y_range
+
         for idx, var in enumerate(variables, 1):
             plt.subplot(1, n_vars, idx)
             data = getattr(self.paths, var)
@@ -107,12 +130,16 @@ class TransitionPathVisualizer:
                 label = 'No TAI' if i == 0 else f'TAI in year {i}'
                 plt.plot(data[i, :t_max], label=label)
             
-            plt.title(self.variable_properties[var]['title'])
+            title = titles[idx-1] if titles and idx <= len(titles) else self.variable_properties[var]['title']
+            plt.title(title)
             plt.xlabel('Time Period')
             plt.ylabel(self.variable_properties[var]['ylabel'])
             plt.grid(True)
             if idx == 1:  # Only show legend for first subplot
                 plt.legend()
+
+            if shared_y_range:
+                plt.ylim(global_min, global_max)
                 
         plt.tight_layout()
         
