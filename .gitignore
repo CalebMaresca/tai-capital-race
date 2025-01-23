@@ -31,3 +31,6 @@ var/
 .venv
 venv/
 ENV/
+
+# Output
+output/

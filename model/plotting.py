@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 from typing import List, Optional, Literal
-from model.economy import TransitionPaths
+from model.core import TransitionPaths
 
 class TransitionPathVisualizer:
     """
@@ -40,7 +40,7 @@ class TransitionPathVisualizer:
                      time_periods: Optional[int] = None,
                      title: Optional[str] = None,
                      ylabel: Optional[str] = None,
-                     figsize: tuple = (12, 6)) -> None:
+                     figsize: tuple = (12, 6)) -> plt.Figure:
         """
         Plot specified variable for selected paths.
         
@@ -57,7 +57,7 @@ class TransitionPathVisualizer:
             
         data = getattr(self.paths, variable)
         
-        plt.figure(figsize=figsize)
+        fig = plt.figure(figsize=figsize)
         
         # Determine which paths to plot
         paths_to_plot = selected_paths or range(data.shape[0])
@@ -76,12 +76,14 @@ class TransitionPathVisualizer:
         plt.title(title or self.variable_properties[variable]['title'])
         plt.legend()
         plt.grid(True)
+
+        return fig
     
     def plot_comparison(self,
                        variables: List[VALID_VARIABLES],
                        selected_paths: Optional[List[int]] = None,
                        time_periods: Optional[int] = None,
-                       figsize: tuple = (15, 5)) -> None:
+                       figsize: tuple = (15, 5)) -> plt.Figure:
         """
         Plot multiple variables side by side for comparison.
         
@@ -92,7 +94,7 @@ class TransitionPathVisualizer:
             figsize: Figure size as (width, height)
         """
         n_vars = len(variables)
-        plt.figure(figsize=figsize)
+        fig = plt.figure(figsize=figsize)
         
         for idx, var in enumerate(variables, 1):
             plt.subplot(1, n_vars, idx)
@@ -113,3 +115,5 @@ class TransitionPathVisualizer:
                 plt.legend()
                 
         plt.tight_layout()
+        
+        return fig
