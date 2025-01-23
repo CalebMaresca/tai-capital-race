@@ -3,26 +3,26 @@ from dataclasses import dataclass, field
 from model.utils import unconditional_to_conditional, get_TAI_probs_conditional_on_year
 
 class Economy():
-    def __init__(self, rho, beta, alpha, delta, zeta, TFP_0, g_N, g_TAI, unconditional_TAI_probs):
-        self.rho = rho
+    def __init__(self, eta, beta, alpha, delta, lambda_param, TFP_0, g_SQ, g_TAI, unconditional_TAI_probs):
+        self.eta = eta
         self.beta = beta
         self.alpha = alpha
         self.delta = delta
-        self.zeta = zeta
+        self.lambda_param = lambda_param
         self.TFP_0 = TFP_0
-        self.g_N = g_N
+        self.g_SQ = g_SQ
         self.g_TAI = g_TAI
         self.unconditional_TAI_probs = unconditional_TAI_probs
         self.conditional_TAI_probs = unconditional_to_conditional(unconditional_TAI_probs)
         self.max_TAI_year = len(unconditional_TAI_probs)
-        self.g = np.array([g_N] + [g_TAI] * self.max_TAI_year)
+        self.g = np.array([g_SQ] + [g_TAI] * self.max_TAI_year)
     
     def du(self, c):
         """Calculate marginal utility of consumption"""
-        if self.rho == 1:
+        if self.eta == 1:
             return 1/c
         else:
-            return c**(-self.rho)
+            return c**(-self.eta)
     
     def dv_da_t(self, c, r):
         """Derivative of value function with respect to this period's assets"""
@@ -34,7 +34,7 @@ class Economy():
     
     def dv_TAI_da_TAI_final(self, c, w, a_TAI):
         """Final period derivative of value function with respect to assets in year TAI is invented"""
-        return w * self.df_z_da(a_TAI) / (c**self.rho * (1 - self.beta * (1+self.g_TAI)**(1-self.rho)))
+        return w * self.df_z_da(a_TAI) / (c**self.eta * (1 - self.beta * (1+self.g_TAI)**(1-self.eta)))
     
     def dv_TAI_da_t_full(self, c, r, w, a, dv_TAI_da_TAI_next):
         """
@@ -53,7 +53,7 @@ class Economy():
     
     def df_z_da(self, a):
         """Derivative of share of AI labor with respect to assets"""
-        return self.zeta / a
+        return self.lambda_param / a
     
     def rd(self, K, TFP):
         """
@@ -117,7 +117,7 @@ def create_initial_guess(economy: Economy, r_N: float, r_TAI: float, T: int) -> 
     alpha = economy.alpha
     delta = economy.delta
     TFP_0 = economy.TFP_0
-    g_N = economy.g_N
+    g_SQ = economy.g_SQ
     g_TAI = economy.g_TAI
     max_TAI_year = economy.max_TAI_year
 
@@ -125,7 +125,7 @@ def create_initial_guess(economy: Economy, r_N: float, r_TAI: float, T: int) -> 
     n_paths = max_TAI_year + 1  # Including "TAI never happens" path
 
     TFP = np.zeros((n_paths, T))
-    TFP[0] = TFP_0 * (1 + g_N)**np.arange(T)
+    TFP[0] = TFP_0 * (1 + g_SQ)**np.arange(T)
     for i in range(1, n_paths):
         TFP[i, :i] = TFP[0, :i]
         TFP[i, i:] = TFP[i, i-1] * (1 + g_TAI)**np.arange(1, T-i+1)
@@ -157,7 +157,7 @@ def create_initial_guess(economy: Economy, r_N: float, r_TAI: float, T: int) -> 
     # but since TFP grew at a higher rate, a constant normalized capital will lead to a higher than desired unnormalized capital
     # thuswe need to scale down the capital in the year TAI is invented
     for i in range(1, n_paths):
-        capital[i,i] = capital[i,i] *(1 + g_N) / (1 + g_TAI)
+        capital[i,i] = capital[i,i] *(1 + g_SQ) / (1 + g_TAI)
 
         # Now interpolate in log space between TAI year and transition end
         transition_end = i + 11
@@ -179,8 +179,8 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
     max_iterations: maximum number of iterations
     """
     # 1. Calculate steady state values
-    r_N = ((1 + economy.g_N)**economy.rho)/economy.beta - 1
-    r_TAI = ((1 + economy.g_TAI)**economy.rho)/economy.beta - 1
+    r_N = ((1 + economy.g_SQ)**economy.eta)/economy.beta - 1
+    r_TAI = ((1 + economy.g_TAI)**economy.eta)/economy.beta - 1
     
     # 2-4. Initialize paths
     paths = create_initial_guess(economy, r_N, r_TAI, T)

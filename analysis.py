@@ -1,13 +1,10 @@
 # analysis.py
 
-import os
 from dataclasses import dataclass
 from typing import List, Dict
-import numpy as np
 from pathlib import Path
 
-from model.economy import Economy
-from model.transition_paths import compute_transition_path, calculate_interest_rate_paths
+from model.core import Economy, compute_transition_path, calculate_interest_rate_paths
 from model.plotting import TransitionPathVisualizer
 
 baseline_TAI_probs = [
@@ -29,27 +26,52 @@ def main():
     parameter_sets = [
         ParameterSet(
             name="baseline",
-            rho=1,
-            beta=0.99,
+            eta=1,
+            beta=0.96,
             alpha=0.36,
             delta=0.025,
-            zeta=1,
-            g_N=0.018,
+            lambda_param=1,
+            g_SQ=0.018,
             g_TAI=0.3,
             unconditional_TAI_probs=baseline_TAI_probs,
             description="Baseline model specification"
         ),
         ParameterSet(
             name="no_competition",
-            rho=1,
-            beta=0.99,
+            eta=1,
+            beta=0.96,
             alpha=0.36,
             delta=0.025,
-            zeta=0,
-            g_N=0.018,
+            lambda_param=0,
+            g_SQ=0.018,
             g_TAI=0.3,
             unconditional_TAI_probs=baseline_TAI_probs,
             description="Model without competition over AI labor"
+        ),
+        ParameterSet(
+            name="lambda_2",
+            eta=1,
+            beta=0.96,
+            alpha=0.36,
+            delta=0.025,
+            lambda_param=2,
+            g_SQ=0.018,
+            g_TAI=0.3,
+            unconditional_TAI_probs=baseline_TAI_probs,
+            description="Model with lambda=2"
+        ),
+        ParameterSet(
+            name="lambda_4",
+            eta=1,
+            beta=0.96,
+            alpha=0.36,
+            delta=0.025,
+            lambda_param=4,
+            g_SQ=0.018,
+            g_TAI=0.3,
+            unconditional_TAI_probs=baseline_TAI_probs,
+            lr=0.075,
+            description="Model with lambda=4"
         ),
         # Add more parameter sets as needed
     ]
@@ -82,14 +104,15 @@ def main():
 class ParameterSet:
     """Configuration for a single model run"""
     name: str
-    rho: float
+    eta: float
     beta: float
     alpha: float
     delta: float
-    zeta: float
-    g_N: float
+    lambda_param: float
+    g_SQ: float
     g_TAI: float
     unconditional_TAI_probs: List[float]
+    lr: float = 0.1
     description: str = ""  # Optional description of this parameter set
 
 def create_output_dirs(base_dir: str, param_set: ParameterSet) -> Dict[str, str]:
@@ -115,19 +138,19 @@ def run_analysis(param_set: ParameterSet, output_dirs: Dict[str, str]):
     unconditional_TAI_probs = param_set.unconditional_TAI_probs
     
     economy = Economy(
-        rho=param_set.rho,
+        eta=param_set.eta,
         beta=param_set.beta,
         alpha=param_set.alpha,
         delta=param_set.delta,
-        zeta=param_set.zeta,
+        lambda_param=param_set.lambda_param,
         TFP_0=1,
-        g_N=param_set.g_N,
+        g_SQ=param_set.g_SQ,
         g_TAI=param_set.g_TAI,
         unconditional_TAI_probs=unconditional_TAI_probs
     )
     
     # Compute paths
-    paths = compute_transition_path(economy, T=200, lr=0.1, tolerance=1e-5)
+    paths = compute_transition_path(economy, T=200, lr=param_set.lr, tolerance=1e-5)
     paths = calculate_interest_rate_paths(paths, economy, n_years=31)
     
     # Create visualizations
@@ -135,18 +158,28 @@ def run_analysis(param_set: ParameterSet, output_dirs: Dict[str, str]):
     
     # Generate and save all plots
     plot_specs = [
-        ('capital_rental_rates', {'title': 'Capital Rental Rate Paths'}),
-        ('interest_rates_1y', {'title': '1-Year Interest Rate Paths'}),
-        ('interest_rates_30y', {'title': '30-Year Interest Rate Paths'}),
+        ('capital_rental_rates', {'title': 'Selected Capital Rental Rate Paths', 'selected_paths': [0, 1, 9, 18, economy.max_TAI_year], 'time_periods': 31}),
+        ('interest_rates_1y', {'title': 'Selected 1-Year Interest Rate Paths', 'selected_paths': [0, 1, 9, 18, economy.max_TAI_year], 'time_periods': 31}),
+        ('interest_rates_30y', {'title': 'Selected 30-Year Interest Rate Paths', 'selected_paths': [0, 1, 9, 18, economy.max_TAI_year], 'time_periods': 31}),
         # Add more plot specifications as needed
     ]
     
     for var_name, plot_kwargs in plot_specs:
         fig = plotter.plot_variable(var_name, **plot_kwargs)
         fig.savefig(output_dirs['figures'] / f"{var_name}.png")
+
+    # Generate comparison plots
+    fig = plotter.plot_comparison(
+        variables=['capital_rental_rates', 'interest_rates_1y', 'interest_rates_30y'],
+        titles=['Capital Rental Rate - No TAI Path', '1-Year Interest Rate - No TAI Path', '30-Year Interest Rate - No TAI Path'],
+        selected_paths=[0],
+        time_periods=31,
+        shared_y_range=True
+    )
+    fig.savefig(output_dirs['figures'] / "rates_comparison.png")
         
     # Save key data
-    # (Add code to save relevant numerical results)
+    # (Add code here to save relevant numerical results if desired)
     
     return paths  # Return paths object in case needed for further analysis
 
