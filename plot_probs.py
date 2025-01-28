@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from model.utils import unconditional_to_conditional
 from scipy import stats
 from scipy.optimize import minimize
+import os
 
 def discretized_lognormal_pmf(x, mu, sigma, lower_bound=None, upper_bound=None):
     """
@@ -112,11 +112,13 @@ def fit_betanbinom_params(target_probs, max_n=15, a_init=4, b_init=60, scaling_i
     # Return the distribution of n along with other parameters
     return ((n_values, list(n_probs_result)), result.x[max_n], result.x[max_n + 1], result.x[max_n + 2])
 
-# Use the baseline TAI probs from analysis.py
 cotra_pmf = [
-    0.025, 0.03, 0.035, 0.045, 0.05, 0.055, 0.06, 0.06, 0.055, 0.051,
-    0.048, 0.045, 0.04, 0.035, 0.03, 0.027, 0.022, 0.02, 0.018, 0.016,
-    0.014, 0.012, 0.01, 0.0085, 0.007, 0.0055, 0.004, 0.003, 0.002, 0.001
+    0.033, 0.035, 0.037, 0.0385, 0.04, # 2025-2029
+    0.0415, 0.0425, 0.043, 0.0425, 0.0415, # 2030-2034
+    0.04, 0.0385, 0.037, 0.035, 0.033, # 2035-2039
+    0.031, 0.029, 0.027, 0.025, 0.023, # 2040-2044
+    0.021, 0.019, 0.017, 0.0155, 0.014, # 2045-2049
+    0.0125, 0.011, 0.0095, 0.008, 0.0065 # 2050-2054
 ]
 
 # Load Metaculus forecast data
@@ -130,13 +132,9 @@ for i in range(5, min(35, len(metaculus_cdf)-1)):  # From 2025 to 2025+30 years
     pmf_value = metaculus_cdf[i+1] - metaculus_cdf[i]
     metaculus_pmf.append(pmf_value)
 
-# Get conditional probabilities for both forecasts
-cotra_conditional = unconditional_to_conditional(cotra_pmf)
-metaculus_conditional = unconditional_to_conditional(metaculus_pmf)
-
-# Create years array for x-axis
-years = range(1, len(cotra_pmf)+1)
-years_metaculus = range(1, len(metaculus_pmf)+1)
+# Create years array for x-axis 
+years_cotra = range(2025, 2025 + len(cotra_pmf))
+years_metaculus = range(2025, 2025 + len(metaculus_pmf))
 
 # Fit the parameters to both probability distributions
 print("Fitting baseline probabilities:")
@@ -161,49 +159,63 @@ print(f"a={a_meta:.2f}, b={b_meta:.2f}, scaling={scaling_meta:.2f}")
 
 # Compute fitted distributions
 annual_betanbinom_pmf_cotra = compute_annual_betanbinom_pmf(n_dist, a, b, scaling, max_years=len(cotra_pmf))
-conditional_betanbinom_pmf_cotra = unconditional_to_conditional(annual_betanbinom_pmf_cotra)
 
 annual_betanbinom_pmf_meta = compute_annual_betanbinom_pmf(n_dist_meta, a_meta, b_meta, scaling_meta, max_years=len(metaculus_pmf))
-conditional_betanbinom_pmf_meta = unconditional_to_conditional(annual_betanbinom_pmf_meta)
 
-# Create the plot with two subplots
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+# Create a single plot
+plt.figure(figsize=(12, 6))
 
-# Plot Cotra distributions
-ax1.plot(years, cotra_pmf, 'b-', label='Cotra Unconditional')
-ax1.plot(years, cotra_conditional, 'r-', label='Cotra Conditional')
-ax1.plot(years, annual_betanbinom_pmf_cotra, 'm-', label='Cotra Fitted Beta-NB')
-ax1.plot(years, conditional_betanbinom_pmf_cotra, 'c-', label='Cotra Fitted Conditional')
+# Plot all distributions
+plt.plot(years_cotra, cotra_pmf, 'b-', label='Cotra')
+plt.plot(years_cotra, annual_betanbinom_pmf_cotra, 'g-', label='Cotra Fitted Beta-NB')
+plt.plot(years_metaculus, metaculus_pmf, 'red', label='Metaculus')
+plt.plot(years_metaculus, annual_betanbinom_pmf_meta, 'purple', label='Metaculus Fitted Beta-NB')
 
-# Add text showing sum of Cotra probabilities
+# Add text showing sums of probabilities
 sum_cotra = sum(cotra_pmf)
-ax1.text(0.02, 0.95, f'Sum of Cotra probabilities: {sum_cotra:.3f}', 
-         transform=ax1.transAxes)
-
-# Customize first subplot
-ax1.set_title('Cotra TAI Probability Distribution')
-ax1.set_xlabel('Years from 2025')
-ax1.set_ylabel('Probability')
-ax1.grid(True)
-ax1.legend()
-
-# Plot Metaculus distributions
-ax2.plot(years_metaculus, metaculus_pmf, 'b-', label='Metaculus Unconditional')
-ax2.plot(years_metaculus, metaculus_conditional, 'r-', label='Metaculus Conditional')
-ax2.plot(years_metaculus, annual_betanbinom_pmf_meta, 'm-', label='Metaculus Fitted Beta-NB')
-ax2.plot(years_metaculus, conditional_betanbinom_pmf_meta, 'c-', label='Metaculus Fitted Conditional')
-
-# Add text showing sum of Metaculus probabilities
 sum_metaculus = sum(metaculus_pmf)
-ax2.text(0.02, 0.95, f'Sum of Metaculus probabilities: {sum_metaculus:.3f}', 
-         transform=ax2.transAxes)
+plt.text(0.02, 0.95, f'Sum of Cotra probabilities: {sum_cotra:.3f}\nSum of Metaculus probabilities: {sum_metaculus:.3f}', 
+         transform=plt.gca().transAxes)
 
-# Customize second subplot
-ax2.set_title('Metaculus TAI Probability Distribution')
-ax2.set_xlabel('Years from 2025')
-ax2.set_ylabel('Probability')
-ax2.grid(True)
-ax2.legend()
+# Customize plot
+plt.xlabel('Year')
+plt.ylabel('Probability')
+plt.grid(True)
+plt.legend()
 
 plt.tight_layout()
-plt.show()
+
+# Create output directory if it doesn't exist
+output_dir = 'output/probabilities'
+os.makedirs(output_dir, exist_ok=True)
+
+# Save the plot
+plt.savefig(os.path.join(output_dir, 'tai_probabilities.png'), dpi=600, bbox_inches='tight')
+plt.close()
+
+# Save the probability data to CSV
+data = {
+    'year': list(range(2025, 2025 + max(len(cotra_pmf), len(metaculus_pmf)))),
+    'cotra': cotra_pmf + [None] * (len(metaculus_pmf) - len(cotra_pmf)) if len(metaculus_pmf) > len(cotra_pmf) else cotra_pmf,
+    'cotra-fitted': annual_betanbinom_pmf_cotra + [None] * (len(metaculus_pmf) - len(cotra_pmf)) if len(metaculus_pmf) > len(cotra_pmf) else annual_betanbinom_pmf_cotra,
+    'metaculus': [None] * (len(cotra_pmf) - len(metaculus_pmf)) + metaculus_pmf if len(cotra_pmf) > len(metaculus_pmf) else metaculus_pmf,
+    'metaculus-fitted': [None] * (len(cotra_pmf) - len(metaculus_pmf)) + annual_betanbinom_pmf_meta if len(cotra_pmf) > len(metaculus_pmf) else annual_betanbinom_pmf_meta
+}
+df = pd.DataFrame(data)
+df.to_csv(os.path.join(output_dir, 'tai_probabilities.csv'), index=False)
+
+# Save the fitted parameters to a text file
+with open(os.path.join(output_dir, 'fitted_parameters.txt'), 'w') as f:
+    f.write("Cotra Fitted Parameters:\n")
+    f.write("n distribution:\n")
+    for n, p in zip(n_values, n_probs):
+        if p > 0.001:
+            f.write(f"  n={n}: {p:.3f}\n")
+    f.write(f"a={a:.2f}, b={b:.2f}, scaling={scaling:.2f}\n\n")
+    
+    f.write("Metaculus Fitted Parameters:\n")
+    f.write("n distribution:\n")
+    for n, p in zip(n_values_meta, n_probs_meta):
+        if p > 0.001:
+            f.write(f"  n={n}: {p:.3f}\n")
+    f.write(f"a={a_meta:.2f}, b={b_meta:.2f}, scaling={scaling_meta:.2f}\n")
