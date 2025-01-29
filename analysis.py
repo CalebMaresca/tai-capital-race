@@ -13,8 +13,8 @@ from model.plotting import TransitionPathVisualizer
 probs_df = pd.read_csv('output/probabilities/tai_probabilities.csv')
 
 # Get Cotra and Metaculus probabilities, removing any NaN values
-cotra_probs = [p for p in probs_df['cotra'].dropna()]
-metaculus_probs = [p for p in probs_df['metaculus'].dropna()]
+cotra_probs = [p for p in probs_df['cotra-fitted'].dropna()]
+metaculus_probs = [p for p in probs_df['metaculus-fitted'].dropna()]
 
 @dataclass
 class ParameterSet:
