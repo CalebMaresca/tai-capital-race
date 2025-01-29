@@ -1,104 +1,20 @@
 # analysis.py
 
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
 
 from model.core import Economy, compute_transition_path, calculate_interest_rate_paths
 from model.plotting import TransitionPathVisualizer
 
-baseline_TAI_probs = [
-        0.025, 0.03, 0.035, 0.045, 0.05, 0.055, 0.06, 0.06, 0.055, 0.051,
-        0.048, 0.045, 0.04, 0.035, 0.03, 0.027, 0.022, 0.02, 0.018, 0.016,
-        0.014, 0.012, 0.01, 0.008, 0.006, 0.004, 0.002
-    ]
+# Read TAI probabilities from CSV
+probs_df = pd.read_csv('output/probabilities/tai_probabilities.csv')
 
-def main():
-    """
-    Main analysis script. Edit parameter sets and output directory here.
-    """
-    # === USER PARAMETERS ===
-    
-    # Set base output directory
-    BASE_OUTPUT_DIR = "output"
-    
-    # Define parameter sets to analyze
-    parameter_sets = [
-        ParameterSet(
-            name="baseline",
-            eta=1,
-            beta=0.96,
-            alpha=0.36,
-            delta=0.025,
-            lambda_param=1,
-            g_SQ=0.018,
-            g_TAI=0.3,
-            unconditional_TAI_probs=baseline_TAI_probs,
-            description="Baseline model specification"
-        ),
-        ParameterSet(
-            name="no_competition",
-            eta=1,
-            beta=0.96,
-            alpha=0.36,
-            delta=0.025,
-            lambda_param=0,
-            g_SQ=0.018,
-            g_TAI=0.3,
-            unconditional_TAI_probs=baseline_TAI_probs,
-            description="Model without competition over AI labor"
-        ),
-        ParameterSet(
-            name="lambda_2",
-            eta=1,
-            beta=0.96,
-            alpha=0.36,
-            delta=0.025,
-            lambda_param=2,
-            g_SQ=0.018,
-            g_TAI=0.3,
-            unconditional_TAI_probs=baseline_TAI_probs,
-            description="Model with lambda=2"
-        ),
-        ParameterSet(
-            name="lambda_4",
-            eta=1,
-            beta=0.96,
-            alpha=0.36,
-            delta=0.025,
-            lambda_param=4,
-            g_SQ=0.018,
-            g_TAI=0.3,
-            unconditional_TAI_probs=baseline_TAI_probs,
-            lr=0.075,
-            description="Model with lambda=4"
-        ),
-        # Add more parameter sets as needed
-    ]
-    
-    # === ANALYSIS EXECUTION ===
-    print(f"Starting analysis for {len(parameter_sets)} parameter sets...")
-    
-    # Run analysis for each parameter set
-    for param_set in parameter_sets:
-        print(f"\nRunning analysis for {param_set.name}")
-        print(f"Description: {param_set.description}")
-        
-        # Create output directories
-        output_dirs = create_output_dirs(BASE_OUTPUT_DIR, param_set)
-        
-        # Run analysis
-        try:
-            paths = run_analysis(param_set, output_dirs)
-            print(f"Analysis completed successfully for {param_set.name}")
-        except Exception as e:
-            print(f"Error in analysis for {param_set.name}: {str(e)}")
-            continue
-
-    print("\nAnalysis complete!")
-
-
-# === SUPPORTING CLASSES AND FUNCTIONS ===
+# Get Cotra and Metaculus probabilities, removing any NaN values
+cotra_probs = [p for p in probs_df['cotra'].dropna()]
+metaculus_probs = [p for p in probs_df['metaculus'].dropna()]
 
 @dataclass
 class ParameterSet:
@@ -115,13 +31,19 @@ class ParameterSet:
     lr: float = 0.1
     description: str = ""  # Optional description of this parameter set
 
-def create_output_dirs(base_dir: str, param_set: ParameterSet) -> Dict[str, str]:
-    """Create output directory structure for a parameter set"""
-    # Create main output dir if it doesn't exist
-    output_dir = Path(base_dir) / param_set.name
+@dataclass
+class ParameterGroup:
+    """A group of related parameter sets to be analyzed together"""
+    name: str
+    description: str
+    parameter_sets: List[ParameterSet]
+    line_styles: Optional[Dict[str, str]] = None
+
+def create_output_dirs(base_dir: str, group_name: str) -> Dict[str, Path]:
+    """Create output directory structure"""
+    output_dir = Path(base_dir) / group_name
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create subdirectories for different types of output
     dirs = {
         'figures': output_dir / 'figures',
         'data': output_dir / 'data',
@@ -132,57 +54,181 @@ def create_output_dirs(base_dir: str, param_set: ParameterSet) -> Dict[str, str]
         
     return dirs
 
-def run_analysis(param_set: ParameterSet, output_dirs: Dict[str, str]):
-    """Run full analysis for a parameter set and save results"""
-    # Initialize model
-    unconditional_TAI_probs = param_set.unconditional_TAI_probs
+def run_analysis(param_group: ParameterGroup, base_output_dir: str):
+    """Run full analysis for a parameter group and save results"""
+    # Create output directories
+    output_dirs = create_output_dirs(base_output_dir, param_group.name)
     
-    economy = Economy(
-        eta=param_set.eta,
-        beta=param_set.beta,
-        alpha=param_set.alpha,
-        delta=param_set.delta,
-        lambda_param=param_set.lambda_param,
-        TFP_0=1,
-        g_SQ=param_set.g_SQ,
-        g_TAI=param_set.g_TAI,
-        unconditional_TAI_probs=unconditional_TAI_probs
-    )
+    # Dictionary to store paths for all parameter sets in the group
+    paths_dict = {}
     
-    # Compute paths
-    paths = compute_transition_path(economy, T=200, lr=param_set.lr, tolerance=1e-5)
-    paths = calculate_interest_rate_paths(paths, economy, n_years=31)
+    # Run analysis for each parameter set in the group
+    for param_set in param_group.parameter_sets:
+        print(f"\nAnalyzing {param_set.name}")
+        print(f"Description: {param_set.description}")
+        
+        # Initialize model
+        economy = Economy(
+            eta=param_set.eta,
+            beta=param_set.beta,
+            alpha=param_set.alpha,
+            delta=param_set.delta,
+            lambda_param=param_set.lambda_param,
+            TFP_0=1,
+            g_SQ=param_set.g_SQ,
+            g_TAI=param_set.g_TAI,
+            unconditional_TAI_probs=param_set.unconditional_TAI_probs
+        )
+        
+        # Compute paths
+        paths = compute_transition_path(economy, T=200, lr=param_set.lr, tolerance=1e-5)
+        paths = calculate_interest_rate_paths(paths, economy, n_years=31)
+        paths_dict[param_set.name] = paths
     
-    # Create visualizations
-    plotter = TransitionPathVisualizer(paths)
+    # Create visualizer with all paths
+    plotter = TransitionPathVisualizer(paths_dict)
     
-    # Generate and save all plots
-    plot_specs = [
-        ('capital_rental_rates', {'title': 'Selected Capital Rental Rate Paths', 'selected_paths': [0, 1, 9, 18, economy.max_TAI_year], 'time_periods': 31}),
-        ('interest_rates_1y', {'title': 'Selected 1-Year Interest Rate Paths', 'selected_paths': [0, 1, 9, 18, economy.max_TAI_year], 'time_periods': 31}),
-        ('interest_rates_30y', {'title': 'Selected 30-Year Interest Rate Paths', 'selected_paths': [0, 1, 9, 18, economy.max_TAI_year], 'time_periods': 31}),
-        # Add more plot specifications as needed
-    ]
+    # Generate plots comparing all parameter sets in the group
+    variables = ['capital_rental_rates', 'interest_rates_1y', 'interest_rates_30y']
+    selected_paths = [0, 1, 9, 18]
+    line_styles = param_group.line_styles or {name: '-' for name in paths_dict.keys()}
     
-    for var_name, plot_kwargs in plot_specs:
-        fig = plotter.plot_variable(var_name, **plot_kwargs)
-        fig.savefig(output_dirs['figures'] / f"{var_name}.png")
-
-    # Generate comparison plots
+    for var_name in variables:
+        # Single variable plot
+        fig = plotter.plot_variable(
+            var_name,
+            selected_paths=selected_paths,
+            time_periods=31,
+            title=f'{var_name.replace("_", " ").title()} - {param_group.name}',
+            line_styles=line_styles
+        )
+        fig.savefig(output_dirs['figures'] / f"{var_name}_comparison.png")
+        plt.close(fig)
+    
+    # Multi-variable comparison plot
     fig = plotter.plot_comparison(
-        variables=['capital_rental_rates', 'interest_rates_1y', 'interest_rates_30y'],
-        titles=['Capital Rental Rate - No TAI Path', '1-Year Interest Rate - No TAI Path', '30-Year Interest Rate - No TAI Path'],
-        selected_paths=[0],
+        variables=variables,
+        selected_paths=[0],  # Only show No TAI path for clarity
         time_periods=31,
-        shared_y_range=True
+        titles=[f'{var.replace("_", " ").title()} - {param_group.name}' for var in variables],
+        shared_y_range=True,
+        line_styles=line_styles
     )
     fig.savefig(output_dirs['figures'] / "rates_comparison.png")
-        
-    # Save key data
-    # (Add code here to save relevant numerical results if desired)
+    plt.close(fig)
     
-    return paths  # Return paths object in case needed for further analysis
+    return paths_dict
 
+def main():
+    """Main analysis script"""
+    # === USER PARAMETERS ===
+    BASE_OUTPUT_DIR = "output"
+    
+    # Define parameter groups
+    parameter_groups = [
+        ParameterGroup(
+            name="baseline",
+            description="Baseline model comparison",
+            parameter_sets=[
+                ParameterSet(
+                    name="cotra",
+                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    lambda_param=1, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=cotra_probs,
+                    description="Baseline model with Cotra probabilities"
+                ),
+                ParameterSet(
+                    name="metaculus",
+                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    lambda_param=1, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=metaculus_probs,
+                    description="Baseline model with Metaculus probabilities"
+                )
+            ],
+            line_styles={'cotra': '-', 'metaculus': '--'}
+        ),
+        ParameterGroup(
+            name="no_competition",
+            description="Model without competition over AI labor",
+            parameter_sets=[
+                ParameterSet(
+                    name="cotra",
+                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    lambda_param=0, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=cotra_probs,
+                    description="No competition model with Cotra probabilities"
+                ),
+                ParameterSet(
+                    name="metaculus",
+                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    lambda_param=0, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=metaculus_probs,
+                    description="No competition model with Metaculus probabilities"
+                )
+            ],
+            line_styles={'cotra': '-', 'metaculus': '--'}
+        ),
+        ParameterGroup(
+            name="lambda_2",
+            description="Model with lambda=2",
+            parameter_sets=[
+                ParameterSet(
+                    name="cotra",
+                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    lambda_param=2, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=cotra_probs,
+                    description="Lambda=2 model with Cotra probabilities"
+                ),
+                ParameterSet(
+                    name="metaculus",
+                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    lambda_param=2, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=metaculus_probs,
+                    description="Lambda=2 model with Metaculus probabilities"
+                )
+            ],
+            line_styles={'cotra': '-', 'metaculus': '--'}
+        ),
+        ParameterGroup(
+            name="lambda_4",
+            description="Model with lambda=4",
+            parameter_sets=[
+                ParameterSet(
+                    name="cotra",
+                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    lambda_param=4, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=cotra_probs,
+                    lr=0.075,
+                    description="Lambda=4 model with Cotra probabilities"
+                ),
+                ParameterSet(
+                    name="metaculus",
+                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    lambda_param=4, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=metaculus_probs,
+                    lr=0.075,
+                    description="Lambda=4 model with Metaculus probabilities"
+                )
+            ],
+            line_styles={'cotra': '-', 'metaculus': '--'}
+        )
+    ]
+    
+    # === ANALYSIS EXECUTION ===
+    print(f"Starting analysis for {len(parameter_groups)} parameter groups...")
+    
+    # Run analysis for each parameter group
+    for group in parameter_groups:
+        print(f"\nAnalyzing group: {group.name}")
+        print(f"Description: {group.description}")
+        try:
+            paths_dict = run_analysis(group, BASE_OUTPUT_DIR)
+            print(f"Analysis completed successfully for group {group.name}")
+        except Exception as e:
+            print(f"Error in analysis for group {group.name}: {str(e)}")
+            continue
+
+    print("\nAnalysis complete!")
 
 if __name__ == "__main__":
     main()
