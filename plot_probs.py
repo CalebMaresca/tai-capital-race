@@ -117,8 +117,14 @@ cotra_pmf = [
     0.0415, 0.0425, 0.043, 0.0425, 0.0415, # 2030-2034
     0.04, 0.0385, 0.037, 0.035, 0.033, # 2035-2039
     0.031, 0.029, 0.027, 0.025, 0.023, # 2040-2044
-    0.021, 0.019, 0.017, 0.0155, 0.014, # 2045-2049
-    0.0125, 0.011, 0.0095, 0.008, 0.0065 # 2050-2054
+    0.0215, 0.020, 0.0185, 0.017, 0.0155, # 2045-2049
+    0.014, 0.013, 0.012, 0.011, 0.010, # 2050-2054
+    0.0095, 0.009, 0.0085, 0.008, 0.0075, # 2055-2059
+    0.007, 0.0065, 0.006, 0.0055, 0.005, # 2060-2064
+    0.0045, 0.004, 0.0035, 0.003, 0.0025, # 2065-2069
+    0.002, 0.0016, 0.0013, 0.001, 0.0008, # 2070-2074
+    0.0006, 0.00045, 0.00035, 0.0003, 0.00025, # 2075-2079
+    0.0002 # 2080
 ]
 
 # Load Metaculus forecast data
@@ -128,7 +134,7 @@ metaculus_cdf = eval(forecast_df['Continuous CDF'].iloc[-1])  # Get last CDF
 # Convert CDF to PDF starting from 2025 (5 years from 2020)
 # and truncate at 30 years from 2025
 metaculus_pmf = []
-for i in range(5, min(35, len(metaculus_cdf)-1)):  # From 2025 to 2025+30 years
+for i in range(5, min(61, len(metaculus_cdf)-1)):  # From 2025 to 2080
     pmf_value = metaculus_cdf[i+1] - metaculus_cdf[i]
     metaculus_pmf.append(pmf_value)
 
