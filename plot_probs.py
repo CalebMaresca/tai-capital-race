@@ -5,27 +5,6 @@ from scipy import stats
 from scipy.optimize import minimize
 import os
 
-def discretized_lognormal_pmf(x, mu, sigma, lower_bound=None, upper_bound=None):
-    """
-    Calculate PMF of a discretized lognormal distribution using [x-1, x] intervals
-    """
-    x = np.asarray(x)
-    
-    # Calculate CDF at x and x-1
-    cdf_x = stats.lognorm.cdf(x, s=sigma, scale=np.exp(mu))
-    cdf_x_minus_1 = stats.lognorm.cdf(x - 1, s=sigma, scale=np.exp(mu))
-    
-    # PMF is the difference between consecutive CDFs
-    pmf = cdf_x - cdf_x_minus_1
-    
-    # Normalize if bounds are provided
-    if lower_bound is not None and upper_bound is not None:
-        total_prob = stats.lognorm.cdf(upper_bound, s=sigma, scale=np.exp(mu)) - \
-                     stats.lognorm.cdf(lower_bound, s=sigma, scale=np.exp(mu))
-        pmf = pmf / total_prob
-        
-    return pmf*0.8
-
 def compute_annual_betanbinom_pmf(n_param, a, b, scaling=0.8, max_years=30):
     """
     Compute annual beta-negative binomial PMF.
