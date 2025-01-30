@@ -5,6 +5,7 @@ from typing import List, Dict, Optional
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
+import pickle
 
 from model.core import Economy, compute_transition_path, calculate_interest_rate_paths
 from model.plotting import TransitionPathVisualizer
@@ -47,6 +48,7 @@ def create_output_dirs(base_dir: str, group_name: str) -> Dict[str, Path]:
     dirs = {
         'figures': output_dir / 'figures',
         'data': output_dir / 'data',
+        'paths': output_dir / 'paths',  # New directory for saved paths
     }
     
     for d in dirs.values():
@@ -54,10 +56,32 @@ def create_output_dirs(base_dir: str, group_name: str) -> Dict[str, Path]:
         
     return dirs
 
-def run_analysis(param_group: ParameterGroup, base_output_dir: str):
-    """Run full analysis for a parameter group and save results"""
+def save_paths(paths_dict: Dict, output_path: Path, group_name: str):
+    """Save paths dictionary to a pickle file"""
+    file_path = output_path / f"{group_name}_paths.pkl"
+    with open(file_path, 'wb') as f:
+        pickle.dump(paths_dict, f)
+    print(f"Saved paths to {file_path}")
+
+def load_paths(output_path: Path, group_name: str) -> Optional[Dict]:
+    """Load paths dictionary from a pickle file if it exists"""
+    file_path = output_path / f"{group_name}_paths.pkl"
+    if file_path.exists():
+        with open(file_path, 'rb') as f:
+            return pickle.load(f)
+    return None
+
+def compute_paths(param_group: ParameterGroup, base_output_dir: str, force_recompute: bool = False) -> Dict:
+    """Compute or load transition paths for a parameter group"""
     # Create output directories
     output_dirs = create_output_dirs(base_output_dir, param_group.name)
+    
+    # Try to load existing paths if not forcing recomputation
+    if not force_recompute:
+        paths_dict = load_paths(output_dirs['paths'], param_group.name)
+        if paths_dict is not None:
+            print(f"Loaded existing paths for {param_group.name}")
+            return paths_dict
     
     # Dictionary to store paths for all parameter sets in the group
     paths_dict = {}
@@ -82,8 +106,16 @@ def run_analysis(param_group: ParameterGroup, base_output_dir: str):
         
         # Compute paths
         paths = compute_transition_path(economy, T=200, lr=param_set.lr, tolerance=1e-5)
-        paths = calculate_interest_rate_paths(paths, economy, n_years=31)
+        paths = calculate_interest_rate_paths(paths, economy, n_years=26)
         paths_dict[param_set.name] = paths
+    
+    # Save the computed paths
+    save_paths(paths_dict, output_dirs['paths'], param_group.name)
+    return paths_dict
+
+def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_dir: str):
+    """Generate plots for a parameter group using the provided paths"""
+    output_dirs = create_output_dirs(base_output_dir, param_group.name)
     
     # Create visualizer with all paths
     plotter = TransitionPathVisualizer(paths_dict)
@@ -98,7 +130,7 @@ def run_analysis(param_group: ParameterGroup, base_output_dir: str):
         fig = plotter.plot_variable(
             var_name,
             selected_paths=selected_paths,
-            time_periods=31,
+            time_periods=26,
             title=f'{var_name.replace("_", " ").title()} - {param_group.name}',
             line_styles=line_styles
         )
@@ -109,20 +141,19 @@ def run_analysis(param_group: ParameterGroup, base_output_dir: str):
     fig = plotter.plot_comparison(
         variables=variables,
         selected_paths=[0],  # Only show No TAI path for clarity
-        time_periods=31,
+        time_periods=26,
         titles=[f'{var.replace("_", " ").title()} - {param_group.name}' for var in variables],
         shared_y_range=True,
         line_styles=line_styles
     )
     fig.savefig(output_dirs['figures'] / "rates_comparison.png")
     plt.close(fig)
-    
-    return paths_dict
 
 def main():
     """Main analysis script"""
     # === USER PARAMETERS ===
     BASE_OUTPUT_DIR = "output"
+    FORCE_RECOMPUTE = False  # Set to True to force recomputation of paths
     
     # Define parameter groups
     parameter_groups = [
@@ -217,15 +248,20 @@ def main():
     # === ANALYSIS EXECUTION ===
     print(f"Starting analysis for {len(parameter_groups)} parameter groups...")
     
-    # Run analysis for each parameter group
+    # Process each parameter group
     for group in parameter_groups:
-        print(f"\nAnalyzing group: {group.name}")
+        print(f"\nProcessing group: {group.name}")
         print(f"Description: {group.description}")
         try:
-            paths_dict = run_analysis(group, BASE_OUTPUT_DIR)
-            print(f"Analysis completed successfully for group {group.name}")
+            # First compute or load the paths
+            paths_dict = compute_paths(group, BASE_OUTPUT_DIR, force_recompute=FORCE_RECOMPUTE)
+            print(f"Paths obtained successfully for group {group.name}")
+            
+            # Then generate the plots
+            generate_plots(group, paths_dict, BASE_OUTPUT_DIR)
+            print(f"Plots generated successfully for group {group.name}")
         except Exception as e:
-            print(f"Error in analysis for group {group.name}: {str(e)}")
+            print(f"Error processing group {group.name}: {str(e)}")
             continue
 
     print("\nAnalysis complete!")
