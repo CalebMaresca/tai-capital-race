@@ -149,6 +149,49 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
     fig.savefig(output_dirs['figures'] / "rates_comparison.png")
     plt.close(fig)
 
+def generate_latex_table(param_groups: List[ParameterGroup], group_dict: Dict) -> str:
+    """Generate a LaTeX table comparing initial values across parameter sets"""
+    latex_table = [
+        "\\begin{table}[h]",
+        "\\centering",
+        "\\begin{tabular}{lccc}",
+        "\\hline",
+        "Parameter Set & Capital Rental Rate & 1y Interest Rate & 30y Interest Rate \\\\",
+        "\\hline"
+    ]
+    
+    for group in param_groups:
+        paths_dict = group_dict[group.name]
+        # Add group header
+        latex_table.append(f"\\multicolumn{{4}}{{l}}{{\\textbf{{{group.name}}}}} \\\\")
+        
+        for param_set in group.parameter_sets:
+            if param_set.name in paths_dict:
+                paths = paths_dict[param_set.name]
+                # Get year 0 values
+                rate_1y = paths.interest_rates_1y[0,0]
+                rate_30y = paths.interest_rates_30y[0,0]
+                
+                # Format values as percentages with 2 decimal places
+                row = (
+                    f"{param_set.name} & "
+                    f"{rate_1y*100:.2f}\\% & "
+                    f"{rate_30y*100:.2f}\\% \\\\"
+                )
+                latex_table.append(row)
+        
+        # Add spacing between groups
+        latex_table.append("\\hline")
+    
+    latex_table.extend([
+        "\\end{tabular}",
+        "\\caption{Initial Values by Parameter Set}",
+        "\\label{tab:initial_values}",
+        "\\end{table}"
+    ])
+    
+    return "\n".join(latex_table)
+
 def main():
     """Main analysis script"""
     # === USER PARAMETERS ===
@@ -248,6 +291,9 @@ def main():
     # === ANALYSIS EXECUTION ===
     print(f"Starting analysis for {len(parameter_groups)} parameter groups...")
     
+    # Dictionary to store all paths
+    all_paths_dict = {}
+    
     # Process each parameter group
     for group in parameter_groups:
         print(f"\nProcessing group: {group.name}")
@@ -255,6 +301,7 @@ def main():
         try:
             # First compute or load the paths
             paths_dict = compute_paths(group, BASE_OUTPUT_DIR, force_recompute=FORCE_RECOMPUTE)
+            all_paths_dict[group.name] = paths_dict
             print(f"Paths obtained successfully for group {group.name}")
             
             # Then generate the plots
@@ -263,6 +310,13 @@ def main():
         except Exception as e:
             print(f"Error processing group {group.name}: {str(e)}")
             continue
+    
+    # Generate and save the LaTeX table
+    latex_table = generate_latex_table(parameter_groups, all_paths_dict)
+    output_path = Path(BASE_OUTPUT_DIR) / "initial_values_table.tex"
+    with open(output_path, 'w') as f:
+        f.write(latex_table)
+    print(f"\nLaTeX table saved to {output_path}")
 
     print("\nAnalysis complete!")
 
