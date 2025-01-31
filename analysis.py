@@ -154,16 +154,16 @@ def generate_latex_table(param_groups: List[ParameterGroup], group_dict: Dict) -
     latex_table = [
         "\\begin{table}[h]",
         "\\centering",
-        "\\begin{tabular}{lccc}",
+        "\\begin{tabular}{lcc}",
         "\\hline",
-        "Parameter Set & Capital Rental Rate & 1y Interest Rate & 30y Interest Rate \\\\",
+        "Parameter Set & 1y Interest Rate & 30y Interest Rate \\\\",
         "\\hline"
     ]
     
     for group in param_groups:
         paths_dict = group_dict[group.name]
         # Add group header
-        latex_table.append(f"\\multicolumn{{4}}{{l}}{{\\textbf{{{group.name}}}}} \\\\")
+        latex_table.append(f"\\multicolumn{{3}}{{l}}{{\\textbf{{{group.name}}}}} \\\\")
         
         for param_set in group.parameter_sets:
             if param_set.name in paths_dict:
