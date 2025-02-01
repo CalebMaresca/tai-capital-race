@@ -52,7 +52,8 @@ class TransitionPathVisualizer:
                      ylabel: Optional[str] = None,
                      figsize: tuple = (12, 6),
                      path_names: Optional[List[str]] = None,
-                     line_styles: Optional[Dict[str, str]] = None) -> plt.Figure:
+                     line_styles: Optional[Dict[str, str]] = None,
+                     fontsize: int = 14) -> plt.Figure:
         """
         Plot specified variable for selected paths.
         
@@ -65,6 +66,7 @@ class TransitionPathVisualizer:
             figsize: Figure size as (width, height)
             path_names: List of path names to plot. If None, plots all paths
             line_styles: Dictionary mapping path names to their line styles
+            fontsize: Base font size for plot text elements
         """
         fig = plt.figure(figsize=figsize)
         
@@ -87,14 +89,18 @@ class TransitionPathVisualizer:
             
             for i in indices:
                 label = f'{name} - {"No TAI" if i == 0 else f"TAI in year {i}"}'
-                plt.plot(data[i, :t_max], line_styles[name], label=label)
+                plt.plot(data[i, :t_max], line_styles[name], label=label, linewidth=2)
             
-        # Set labels and title
-        plt.xlabel('Time Period')
-        plt.ylabel(ylabel or self.variable_properties[variable]['ylabel'])
-        plt.title(title or self.variable_properties[variable]['title'])
-        plt.legend()
+        # Set labels and title with increased font sizes
+        plt.xlabel('Time Period', fontsize=fontsize)
+        plt.ylabel(ylabel or self.variable_properties[variable]['ylabel'], fontsize=fontsize)
+        plt.title(title or self.variable_properties[variable]['title'], fontsize=fontsize + 2, pad=20)
+        plt.legend(fontsize=fontsize - 2)
         plt.grid(True)
+        
+        # Increase tick label sizes
+        plt.xticks(fontsize=fontsize - 2)
+        plt.yticks(fontsize=fontsize - 2)
 
         return fig
     
@@ -106,7 +112,8 @@ class TransitionPathVisualizer:
                        figsize: Optional[tuple] = None,
                        shared_y_range: bool = False,
                        path_names: Optional[List[str]] = None,
-                       line_styles: Optional[Dict[str, str]] = None) -> plt.Figure:
+                       line_styles: Optional[Dict[str, str]] = None,
+                       fontsize: int = 14) -> plt.Figure:
         """
         Plot multiple variables side by side for comparison.
         
@@ -119,6 +126,7 @@ class TransitionPathVisualizer:
             shared_y_range: If True, all subplots will share the same y-axis range
             path_names: List of path names to plot. If None, plots all paths
             line_styles: Dictionary mapping path names to their line styles
+            fontsize: Base font size for plot text elements
         """
         n_vars = len(variables)
         if figsize is None:
@@ -161,66 +169,23 @@ class TransitionPathVisualizer:
                 
                 for i in indices:
                     label = f'{name} - {"No TAI" if i == 0 else f"TAI in year {i}"}'
-                    plt.plot(data[i, :t_max], line_styles[name], label=label)
+                    plt.plot(data[i, :t_max], line_styles[name], label=label, linewidth=2)
             
             title = titles[idx-1] if titles and idx <= len(titles) else self.variable_properties[var]['title']
-            plt.title(title)
-            plt.xlabel('Time Period')
-            plt.ylabel(self.variable_properties[var]['ylabel'])
+            plt.title(title, fontsize=fontsize + 2, pad=20)
+            plt.xlabel('Time Period', fontsize=fontsize)
+            plt.ylabel(self.variable_properties[var]['ylabel'], fontsize=fontsize)
             plt.grid(True)
             if idx == 1:  # Only show legend for first subplot
-                plt.legend()
+                plt.legend(fontsize=fontsize - 2)
+                
+            # Increase tick label sizes
+            plt.xticks(fontsize=fontsize - 2)
+            plt.yticks(fontsize=fontsize - 2)
 
             if shared_y_range:
                 plt.ylim(global_min, global_max)
                 
         plt.tight_layout()
-        
-        return fig
-
-    @staticmethod
-    def compare_paths(paths_dict: Dict[str, TransitionPaths],
-                     variable: VALID_VARIABLES,
-                     selected_paths: Optional[List[int]] = None,
-                     time_periods: Optional[int] = None,
-                     title: Optional[str] = None,
-                     ylabel: Optional[str] = None,
-                     figsize: tuple = (12, 6),
-                     line_styles: Optional[Dict[str, str]] = None) -> plt.Figure:
-        """
-        Compare the same variable across different path sets.
-        
-        Args:
-            paths_dict: Dictionary mapping path set names to their TransitionPaths objects
-            variable: Name of the variable to plot
-            selected_paths: List of path indices to plot. If None, plots all paths
-            time_periods: Number of time periods to plot. If None, plots all periods
-            title: Custom title for the plot. If None, uses default
-            ylabel: Custom y-axis label. If None, uses default
-            figsize: Figure size as (width, height)
-            line_styles: Dictionary mapping path set names to their line styles
-        """
-        fig = plt.figure(figsize=figsize)
-        
-        # Default line styles if none provided
-        if line_styles is None:
-            line_styles = {name: '-' for name in paths_dict.keys()}
-        
-        # Plot each path set with different line styles
-        for name, paths in paths_dict.items():
-            data = getattr(paths, variable)
-            paths_to_plot = selected_paths or range(data.shape[0])
-            t_max = time_periods or data.shape[1]
-            
-            for i in paths_to_plot:
-                label = f'{name} - {"No TAI" if i == 0 else f"TAI in year {i}"}'
-                plt.plot(data[i, :t_max], line_styles[name], label=label)
-        
-        # Set labels and title
-        plt.xlabel('Time Period')
-        plt.ylabel(ylabel or TransitionPathVisualizer(next(iter(paths_dict.values()))).variable_properties[variable]['ylabel'])
-        plt.title(title or f'Comparison of {variable}')
-        plt.legend()
-        plt.grid(True)
         
         return fig
