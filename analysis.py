@@ -152,7 +152,7 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
 def generate_latex_table(param_groups: List[ParameterGroup], group_dict: Dict) -> str:
     """Generate a LaTeX table comparing initial values across parameter sets"""
     latex_table = [
-        "\\begin{table}[h]",
+        "\\begin{table}[H]",
         "\\centering",
         "\\begin{tabular}{lcc}",
         "\\hline",
