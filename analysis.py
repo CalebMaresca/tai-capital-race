@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+from collections import OrderedDict
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -121,17 +122,21 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
     plotter = TransitionPathVisualizer(paths_dict)
     
     # Generate plots comparing all parameter sets in the group
-    variables = ['capital_rental_rates', 'interest_rates_1y', 'interest_rates_30y']
+    variables = OrderedDict([
+        ('capital_rental_rates', 'Capital Rental Rates'),
+        ('interest_rates_1y', '1-Year Interest Rate'),
+        ('interest_rates_30y', '30-Year Interest Rate')
+    ])
     selected_paths = [0, 1, 9, 18]
     line_styles = param_group.line_styles or {name: '-' for name in paths_dict.keys()}
     
-    for var_name in variables:
+    for var_name, var_title in variables.items():
         # Single variable plot
         fig = plotter.plot_variable(
             var_name,
             selected_paths=selected_paths,
             time_periods=26,
-            title=f'{var_name.replace("_", " ").title()} - {param_group.name}',
+            title=var_title,
             line_styles=line_styles
         )
         fig.savefig(output_dirs['figures'] / f"{var_name}_comparison.png")
@@ -139,10 +144,10 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
     
     # Multi-variable comparison plot
     fig = plotter.plot_comparison(
-        variables=variables,
+        variables=list(variables.keys()),
         selected_paths=[0],  # Only show No TAI path for clarity
         time_periods=26,
-        titles=[f'{var.replace("_", " ").title()} - {param_group.name}' for var in variables],
+        titles=list(variables.values()),
         shared_y_range=True,
         line_styles=line_styles
     )

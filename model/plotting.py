@@ -92,7 +92,7 @@ class TransitionPathVisualizer:
                 plt.plot(data[i, :t_max], line_styles[name], label=label, linewidth=2)
             
         # Set labels and title with increased font sizes
-        plt.xlabel('Time Period', fontsize=fontsize)
+        plt.xlabel('Years from Present', fontsize=fontsize)
         plt.ylabel(ylabel or self.variable_properties[variable]['ylabel'], fontsize=fontsize)
         plt.title(title or self.variable_properties[variable]['title'], fontsize=fontsize + 2, pad=20)
         plt.legend(fontsize=fontsize - 2)
@@ -173,7 +173,7 @@ class TransitionPathVisualizer:
             
             title = titles[idx-1] if titles and idx <= len(titles) else self.variable_properties[var]['title']
             plt.title(title, fontsize=fontsize + 2, pad=20)
-            plt.xlabel('Time Period', fontsize=fontsize)
+            plt.xlabel('Years from Present', fontsize=fontsize)
             plt.ylabel(self.variable_properties[var]['ylabel'], fontsize=fontsize)
             plt.grid(True)
             if idx == 1:  # Only show legend for first subplot
