@@ -168,7 +168,7 @@ def create_initial_guess(economy: Economy, r_N: float, r_TAI: float, T: int) -> 
     print('Initial guess max capital:', np.max(capital))
     return TransitionPaths(T, max_TAI_year, TFP, capital)
 
-def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance: float = 1e-6, max_iterations: int = 100000) -> TransitionPaths:
+def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance: float = 1e-6, max_iterations: int = 100000, warmup_iters: int = 10000, decay_iters: int = 10000, decay_rate: float = 0.9) -> TransitionPaths:
     """
     Compute transition paths using vectorized operations
     
@@ -261,8 +261,21 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
         capital_norm = paths.capital[:, 1:] / paths.TFP[:, 1:]
         dv_da_next_norm = paths.dv_da_next[:, :-1] * paths.TFP[:, :-1]  # Multiply by TFP because derivative is with respect to unnormalized capital
 
+        # Clip gradients to reasonable values
+        max_grad = 1.0  # Can adjust this value
+        dv_da_next_norm = np.clip(dv_da_next_norm, -max_grad, max_grad)
+
+        # Learning rate warmup
+        if iteration < warmup_iters:  # Warmup period
+            min_lr = lr * 0.01  # Start at 1% of target learning rate
+            current_lr = min_lr + (lr - min_lr) * (iteration + 1) / warmup_iters  # Linear warmup from min_lr to lr
+        # elif iteration < 20000:  # Normal learning rate period
+        #     current_lr = lr
+        else:  # Learning rate decay
+            current_lr = lr * decay_rate ** ((iteration - warmup_iters) // decay_iters)
+
         # Gradient ascent step on normalized values
-        new_capital_norm = np.maximum(1e-10, capital_norm + lr * dv_da_next_norm)
+        new_capital_norm = np.maximum(1e-10,capital_norm + current_lr * dv_da_next_norm)
 
         # Convert back to unnormalized values
         new_capital[:, 1:] = new_capital_norm * paths.TFP[:, 1:]
@@ -279,10 +292,10 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
         paths.capital[:, -1] = capital_T # Enforce terminal condition
 
         if (iteration+1) % 1000 == 0:
-            print(f"Iteration {iteration+1}, max diff: {max_diff}, ave diff: {ave_diff}, learning rate: {lr}")
+            print(f"Iteration {iteration+1}, max diff: {max_diff}, ave diff: {ave_diff}, learning rate: {current_lr}")
 
-        if (iteration+1) % 10000 == 0:
-            lr *= 0.9
+        # if (iteration+1) % 10000 == 0:
+        #     lr *= 0.9
     
     print(f"Did not converge after {max_iterations} iterations, final max diff: {max_diff}, final ave diff: {ave_diff}")
     return paths
