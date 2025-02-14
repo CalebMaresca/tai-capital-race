@@ -263,6 +263,7 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
 
         # Clip gradients to reasonable values
         max_grad = 1.0  # Can adjust this value
+        dv_da_next_norm_unclipped = dv_da_next_norm.copy()
         dv_da_next_norm = np.clip(dv_da_next_norm, -max_grad, max_grad)
 
         # Learning rate warmup
@@ -287,6 +288,17 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
             paths.capital = new_capital
             print(f"Converged after {iteration+1} iterations")
             return paths
+        
+         # Only print if the max difference equals the maximum possible step size
+        if np.isclose(max_diff, max_grad * current_lr):
+            idx = np.unravel_index(np.argmax(np.abs(new_capital_norm - capital_norm)), new_capital_norm.shape)
+            print(f"\nMaximum gradient step at iteration {iteration+1}:")
+            print(f"Path {idx[0]}, Time {idx[1]}:")
+            print(f"Original gradient: {dv_da_next_norm_unclipped[idx]}")
+            print(f"Capital: {paths.capital[idx[0], idx[1]]}")
+            print(f"Consumption: {paths.consumption[idx[0], idx[1]]}")
+            print(f"Wage: {paths.wages[idx[0], idx[1]]}")
+            print(f"Capital rental rate: {paths.capital_rental_rates[idx[0], idx[1]]}")
             
         paths.capital = new_capital
         paths.capital[:, -1] = capital_T # Enforce terminal condition

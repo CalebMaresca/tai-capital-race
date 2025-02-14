@@ -31,6 +31,10 @@ class ParameterSet:
     g_TAI: float
     unconditional_TAI_probs: List[float]
     lr: float = 0.1
+    warmup_iters: int = 10000
+    decay_iters: int = 10000
+    decay_rate: float = 0.9
+    max_iterations: int = 100000
     description: str = ""  # Optional description of this parameter set
 
 @dataclass
@@ -39,7 +43,7 @@ class ParameterGroup:
     name: str
     description: str
     parameter_sets: List[ParameterSet]
-    line_styles: Optional[Dict[str, str]] = None
+    line_styles: Optional[Dict[str, Dict[str, float]]] = None
 
 def create_output_dirs(base_dir: str, group_name: str) -> Dict[str, Path]:
     """Create output directory structure"""
@@ -106,7 +110,7 @@ def compute_paths(param_group: ParameterGroup, base_output_dir: str, force_recom
         )
         
         # Compute paths
-        paths = compute_transition_path(economy, T=200, lr=param_set.lr, tolerance=1e-5)
+        paths = compute_transition_path(economy, T=300, max_iterations=param_set.max_iterations, lr=param_set.lr, warmup_iters=param_set.warmup_iters, decay_iters=param_set.decay_iters, decay_rate=param_set.decay_rate, tolerance=1e-5)
         paths = calculate_interest_rate_paths(paths, economy, n_years=26)
         paths_dict[param_set.name] = paths
     
@@ -121,14 +125,28 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
     # Create visualizer with all paths
     plotter = TransitionPathVisualizer(paths_dict)
     
+    # Calculate stationary equilibrium values using parameters from the first parameter set
+    # (they should all have the same g_SQ, eta, beta, alpha, delta)
+    first_params = param_group.parameter_sets[0]
+    r_ss = ((1 + first_params.g_SQ) ** first_params.eta) / first_params.beta - 1
+    
+    # Calculate equilibrium capital (which is the initial capital)
+    k_ss = (first_params.alpha / (r_ss + first_params.delta)) ** (1 / (1 - first_params.alpha))
+    
+    # Calculate equilibrium savings rate
+    # f(k)/k = (r + delta)/alpha in equilibrium
+    fk_over_k_ss = (r_ss + first_params.delta) / first_params.alpha
+    s_ss = (first_params.g_SQ + first_params.delta) / fk_over_k_ss
+    
     # Generate plots comparing all parameter sets in the group
     variables = OrderedDict([
         ('capital_rental_rates', 'Capital Rental Rates'),
         ('interest_rates_1y', '1-Year Interest Rate'),
-        ('interest_rates_30y', '30-Year Interest Rate')
+        ('interest_rates_30y', '30-Year Interest Rate'),
+        ('savings_rates', 'Savings Rate')
     ])
     selected_paths = [0, 1, 9, 18]
-    line_styles = param_group.line_styles or {name: '-' for name in paths_dict.keys()}
+    line_styles = param_group.line_styles or {name: {'style': '-', 'alpha': 1.0} for name in paths_dict.keys()}
     
     for var_name, var_title in variables.items():
         # Single variable plot
@@ -139,18 +157,76 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
             title=var_title,
             line_styles=line_styles
         )
+        
+        # Add horizontal line for stationary equilibrium values
+        if var_name == 'savings_rates':
+            plt.axhline(y=s_ss, color='gray', linestyle=':', alpha=0.8,
+                       label='Stationary Equilibrium Rate', zorder=-1)
+        else:
+            plt.axhline(y=r_ss, color='gray', linestyle=':', alpha=0.8,
+                       label='Stationary Equilibrium Rate', zorder=-1)
+        # Refresh legend to include the new line
+        plt.legend(fontsize=12)
+        
         fig.savefig(output_dirs['figures'] / f"{var_name}_comparison.png")
         plt.close(fig)
     
-    # Multi-variable comparison plot
-    fig = plotter.plot_comparison(
-        variables=list(variables.keys()),
-        selected_paths=[0],  # Only show No TAI path for clarity
-        time_periods=26,
-        titles=list(variables.values()),
-        shared_y_range=True,
-        line_styles=line_styles
-    )
+    # Multi-variable comparison plot with 2x2 layout
+    fig = plt.figure(figsize=(15, 12))  # Adjusted figure size for 2x2 layout
+    
+    # First find global min/max for interest rate plots
+    interest_vars = ['capital_rental_rates', 'interest_rates_1y', 'interest_rates_30y']
+    global_min = float('inf')
+    global_max = float('-inf')
+    
+    for var_name in interest_vars:
+        for name, paths in paths_dict.items():
+            data = getattr(paths, var_name)
+            values = data[0, :26]  # Only looking at No TAI path for 26 periods
+            global_min = min(global_min, values.min())
+            global_max = max(global_max, values.max())
+    
+    # Add 5% padding on each end
+    y_range = global_max - global_min
+    global_min -= 0.05 * y_range
+    global_max += 0.05 * y_range
+    
+    for idx, (var_name, var_title) in enumerate(variables.items(), 1):
+        plt.subplot(2, 2, idx)
+        
+        for name, paths in paths_dict.items():
+            if var_name == 'savings_rates':
+                data = plotter.calculate_savings_rates(paths)
+            else:
+                data = getattr(paths, var_name)
+            
+            style = line_styles[name]
+            # Only show No TAI path for clarity
+            label = f'{name} - No TAI'
+            plt.plot(data[0, :26], style['style'], label=label, linewidth=2, alpha=style['alpha'])
+        
+        # Add horizontal line for stationary equilibrium values
+        if var_name == 'savings_rates':
+            plt.axhline(y=s_ss, color='gray', linestyle=':', alpha=0.8,
+                       label='Stationary Equilibrium Rate', zorder=-1)
+        else:
+            plt.axhline(y=r_ss, color='gray', linestyle=':', alpha=0.8,
+                       label='Stationary Equilibrium Rate', zorder=-1)
+            # Set shared y-axis limits for interest rate plots
+            plt.ylim(global_min, global_max)
+            
+        plt.title(var_title, fontsize=14, pad=20)
+        plt.xlabel('Years from Present', fontsize=12)
+        plt.ylabel(plotter.variable_properties[var_name]['ylabel'], fontsize=12)
+        plt.grid(True)
+        if idx == 1:  # Only show legend for first subplot
+            plt.legend(fontsize=10)
+        
+        # Increase tick label sizes
+        plt.xticks(fontsize=10)
+        plt.yticks(fontsize=10)
+    
+    plt.tight_layout()
     fig.savefig(output_dirs['figures'] / "rates_comparison.png")
     plt.close(fig)
 
@@ -201,7 +277,7 @@ def main():
     """Main analysis script"""
     # === USER PARAMETERS ===
     BASE_OUTPUT_DIR = "output"
-    FORCE_RECOMPUTE = False  # Set to True to force recomputation of paths
+    FORCE_RECOMPUTE = True  # Set to True to force recomputation of paths
     
     # Define parameter groups
     parameter_groups = [
@@ -210,86 +286,132 @@ def main():
             description="Baseline model comparison",
             parameter_sets=[
                 ParameterSet(
-                    name="cotra",
-                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    name="Cotra λ=1",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=1, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=cotra_probs,
+                    warmup_iters=0, decay_rate=0.95,
                     description="Baseline model with Cotra probabilities"
                 ),
                 ParameterSet(
-                    name="metaculus",
-                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    name="Metaculus λ=1",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=1, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=metaculus_probs,
+                    warmup_iters=0, decay_rate=0.95,
                     description="Baseline model with Metaculus probabilities"
-                )
-            ],
-            line_styles={'cotra': '-', 'metaculus': '--'}
-        ),
-        ParameterGroup(
-            name="no_competition",
-            description="Model without competition over AI labor",
-            parameter_sets=[
+                ),
                 ParameterSet(
-                    name="cotra",
-                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    name="Cotra λ=0",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=0, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=cotra_probs,
+                    warmup_iters=0, decay_rate=0.95,
                     description="No competition model with Cotra probabilities"
                 ),
                 ParameterSet(
-                    name="metaculus",
-                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    name="Metaculus λ=0",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=0, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=metaculus_probs,
+                    warmup_iters=0, decay_rate=0.95,
                     description="No competition model with Metaculus probabilities"
                 )
             ],
-            line_styles={'cotra': '-', 'metaculus': '--'}
+            line_styles={
+                'Cotra λ=1': {'style': '-', 'alpha': 1.0},
+                'Metaculus λ=1': {'style': '-', 'alpha': 1.0},
+                'Cotra λ=0': {'style': '--', 'alpha': 0.9},
+                'Metaculus λ=0': {'style': '--', 'alpha': 0.9}
+            }
         ),
         ParameterGroup(
             name="lambda_2",
             description="Model with lambda=2",
             parameter_sets=[
                 ParameterSet(
-                    name="cotra",
-                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    name="Cotra λ=2",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=2, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=cotra_probs,
+                    lr=0.03, decay_iters=50000, decay_rate=0.95,
                     description="Lambda=2 model with Cotra probabilities"
                 ),
                 ParameterSet(
-                    name="metaculus",
-                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    name="Metaculus λ=2",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=2, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=metaculus_probs,
+                    lr=0.03, decay_iters=50000, decay_rate=0.95,
                     description="Lambda=2 model with Metaculus probabilities"
+                ),
+                ParameterSet(
+                    name="Cotra λ=0",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
+                    lambda_param=0, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=cotra_probs,
+                    warmup_iters=0, decay_rate=0.95,
+                    description="No competition model with Cotra probabilities"
+                ),
+                ParameterSet(
+                    name="Metaculus λ=0",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
+                    lambda_param=0, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=metaculus_probs,
+                    warmup_iters=0, decay_rate=0.95,
+                    description="No competition model with Metaculus probabilities"
                 )
             ],
-            line_styles={'cotra': '-', 'metaculus': '--'}
+            line_styles={
+                'Cotra λ=2': {'style': '-', 'alpha': 1.0},
+                'Metaculus λ=2': {'style': '-', 'alpha': 1.0},
+                'Cotra λ=0': {'style': '--', 'alpha': 0.9},
+                'Metaculus λ=0': {'style': '--', 'alpha': 0.9}
+            }
         ),
         ParameterGroup(
             name="lambda_4",
             description="Model with lambda=4",
             parameter_sets=[
                 ParameterSet(
-                    name="cotra",
-                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    name="Cotra λ=4",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=4, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=cotra_probs,
-                    lr=0.075,
+                    lr=0.03, warmup_iters=50000, decay_iters=50000, decay_rate=0.95,
                     description="Lambda=4 model with Cotra probabilities"
                 ),
                 ParameterSet(
-                    name="metaculus",
-                    eta=1, beta=0.96, alpha=0.36, delta=0.025,
+                    name="Metaculus λ=4",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=4, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=metaculus_probs,
-                    lr=0.075,
+                    lr=0.03, warmup_iters=50000, decay_iters=50000, decay_rate=0.95,
                     description="Lambda=4 model with Metaculus probabilities"
+                ),
+                ParameterSet(
+                    name="Cotra λ=0",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
+                    lambda_param=0, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=cotra_probs,
+                    warmup_iters=0, decay_rate=0.95,
+                    description="No competition model with Cotra probabilities"
+                ),
+                ParameterSet(
+                    name="Metaculus λ=0",
+                    eta=1, beta=0.99, alpha=0.36, delta=0.025,
+                    lambda_param=0, g_SQ=0.018, g_TAI=0.3,
+                    unconditional_TAI_probs=metaculus_probs,
+                    warmup_iters=0, decay_rate=0.95,
+                    description="No competition model with Metaculus probabilities"
                 )
             ],
-            line_styles={'cotra': '-', 'metaculus': '--'}
+            line_styles={
+                'Cotra λ=4': {'style': '-', 'alpha': 1.0},
+                'Metaculus λ=4': {'style': '-', 'alpha': 1.0},
+                'Cotra λ=0': {'style': '--', 'alpha': 0.9},
+                'Metaculus λ=0': {'style': '--', 'alpha': 0.9}
+            }
         )
     ]
     
