@@ -34,7 +34,8 @@ class ParameterSet:
     warmup_iters: int = 10000
     decay_iters: int = 10000
     decay_rate: float = 0.9
-    max_iterations: int = 100000
+    max_iterations: int = 1000000
+    max_grad: float = 1.0
     description: str = ""  # Optional description of this parameter set
 
 @dataclass
@@ -110,7 +111,7 @@ def compute_paths(param_group: ParameterGroup, base_output_dir: str, force_recom
         )
         
         # Compute paths
-        paths = compute_transition_path(economy, T=300, max_iterations=param_set.max_iterations, lr=param_set.lr, warmup_iters=param_set.warmup_iters, decay_iters=param_set.decay_iters, decay_rate=param_set.decay_rate, tolerance=1e-5)
+        paths = compute_transition_path(economy, T=300, max_iterations=param_set.max_iterations, lr=param_set.lr, warmup_iters=param_set.warmup_iters, decay_iters=param_set.decay_iters, decay_rate=param_set.decay_rate, tolerance=1e-5, max_grad=param_set.max_grad)
         paths = calculate_interest_rate_paths(paths, economy, n_years=26)
         paths_dict[param_set.name] = paths
     
@@ -160,10 +161,10 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
         
         # Add horizontal line for stationary equilibrium values
         if var_name == 'savings_rates':
-            plt.axhline(y=s_ss, color='gray', linestyle=':', alpha=0.8,
+            plt.axhline(y=s_ss, color='black', linestyle=':', alpha=0.85,
                        label='Stationary Equilibrium Rate', zorder=-1)
         else:
-            plt.axhline(y=r_ss, color='gray', linestyle=':', alpha=0.8,
+            plt.axhline(y=r_ss, color='black', linestyle=':', alpha=0.85,
                        label='Stationary Equilibrium Rate', zorder=-1)
         # Refresh legend to include the new line
         plt.legend(fontsize=12)
@@ -277,7 +278,7 @@ def main():
     """Main analysis script"""
     # === USER PARAMETERS ===
     BASE_OUTPUT_DIR = "output"
-    FORCE_RECOMPUTE = True  # Set to True to force recomputation of paths
+    FORCE_RECOMPUTE = False  # Set to True to force recomputation of paths
     
     # Define parameter groups
     parameter_groups = [
@@ -378,7 +379,7 @@ def main():
                     eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=4, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=cotra_probs,
-                    lr=0.03, warmup_iters=50000, decay_iters=50000, decay_rate=0.95,
+                    lr=0.01, warmup_iters=50000, decay_iters=50000, decay_rate=0.95, max_grad=1,
                     description="Lambda=4 model with Cotra probabilities"
                 ),
                 ParameterSet(
@@ -386,7 +387,7 @@ def main():
                     eta=1, beta=0.99, alpha=0.36, delta=0.025,
                     lambda_param=4, g_SQ=0.018, g_TAI=0.3,
                     unconditional_TAI_probs=metaculus_probs,
-                    lr=0.03, warmup_iters=50000, decay_iters=50000, decay_rate=0.95,
+                    lr=0.01, warmup_iters=50000, decay_iters=50000, decay_rate=0.95, max_grad=1,
                     description="Lambda=4 model with Metaculus probabilities"
                 ),
                 ParameterSet(

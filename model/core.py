@@ -168,7 +168,7 @@ def create_initial_guess(economy: Economy, r_N: float, r_TAI: float, T: int) -> 
     print('Initial guess max capital:', np.max(capital))
     return TransitionPaths(T, max_TAI_year, TFP, capital)
 
-def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance: float = 1e-6, max_iterations: int = 100000, warmup_iters: int = 10000, decay_iters: int = 10000, decay_rate: float = 0.9) -> TransitionPaths:
+def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance: float = 1e-6, max_iterations: int = 100000, warmup_iters: int = 10000, decay_iters: int = 10000, decay_rate: float = 0.9, max_grad: float = 1.0) -> TransitionPaths:
     """
     Compute transition paths using vectorized operations
     
@@ -262,7 +262,6 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
         dv_da_next_norm = paths.dv_da_next[:, :-1] * paths.TFP[:, :-1]  # Multiply by TFP because derivative is with respect to unnormalized capital
 
         # Clip gradients to reasonable values
-        max_grad = 1.0  # Can adjust this value
         dv_da_next_norm_unclipped = dv_da_next_norm.copy()
         dv_da_next_norm = np.clip(dv_da_next_norm, -max_grad, max_grad)
 
@@ -276,7 +275,7 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
             current_lr = lr * decay_rate ** ((iteration - warmup_iters) // decay_iters)
 
         # Gradient ascent step on normalized values
-        new_capital_norm = np.maximum(1e-10,capital_norm + current_lr * dv_da_next_norm)
+        new_capital_norm = np.maximum(1e-10, capital_norm + current_lr * dv_da_next_norm)
 
         # Convert back to unnormalized values
         new_capital[:, 1:] = new_capital_norm * paths.TFP[:, 1:]
@@ -288,17 +287,6 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
             paths.capital = new_capital
             print(f"Converged after {iteration+1} iterations")
             return paths
-        
-         # Only print if the max difference equals the maximum possible step size
-        if np.isclose(max_diff, max_grad * current_lr):
-            idx = np.unravel_index(np.argmax(np.abs(new_capital_norm - capital_norm)), new_capital_norm.shape)
-            print(f"\nMaximum gradient step at iteration {iteration+1}:")
-            print(f"Path {idx[0]}, Time {idx[1]}:")
-            print(f"Original gradient: {dv_da_next_norm_unclipped[idx]}")
-            print(f"Capital: {paths.capital[idx[0], idx[1]]}")
-            print(f"Consumption: {paths.consumption[idx[0], idx[1]]}")
-            print(f"Wage: {paths.wages[idx[0], idx[1]]}")
-            print(f"Capital rental rate: {paths.capital_rental_rates[idx[0], idx[1]]}")
             
         paths.capital = new_capital
         paths.capital[:, -1] = capital_T # Enforce terminal condition
@@ -306,8 +294,18 @@ def compute_transition_path(economy: Economy, T: int, lr: float = 0.1, tolerance
         if (iteration+1) % 1000 == 0:
             print(f"Iteration {iteration+1}, max diff: {max_diff}, ave diff: {ave_diff}, learning rate: {current_lr}")
 
-        # if (iteration+1) % 10000 == 0:
-        #     lr *= 0.9
+        # Only print if the max difference equals the maximum possible step size
+        # if (iteration+1) % 1000 in [0,1,2] and np.isclose(max_diff, max_grad * current_lr):
+        #     idx = np.unravel_index(np.argmax(np.abs(new_capital_norm - capital_norm)), new_capital_norm.shape)
+        #     print(f"\nMaximum gradient step at iteration {iteration+1}:")
+        #     print(f"Path {idx[0]}, Time {idx[1]+1}:")
+        #     print(f"Original gradient: {dv_da_next_norm_unclipped[idx]}")
+        #     print(f"Old Normed Capital: {capital_norm[idx[0], idx[1]]}")
+        #     print(f"New Normed Capital: {new_capital_norm[idx[0], idx[1]]}")
+        #     print(f"diff: {new_capital_norm[idx[0], idx[1]] - capital_norm[idx[0], idx[1]]}")
+        #     print(f"Consumption: {paths.consumption[idx[0], idx[1]+1]}")
+        #     print(f"Wage: {paths.wages[idx[0], idx[1]+1]}")
+        #     print(f"Capital rental rate: {paths.capital_rental_rates[idx[0], idx[1]+1]}")
     
     print(f"Did not converge after {max_iterations} iterations, final max diff: {max_diff}, final ave diff: {ave_diff}")
     return paths
