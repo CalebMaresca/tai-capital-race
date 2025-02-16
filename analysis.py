@@ -242,35 +242,49 @@ def generate_latex_table(param_groups: List[ParameterGroup], group_dict: Dict) -
         "\\hline"
     ]
     
+    # Collect all rates by source and lambda
+    rates = {
+        'Cotra': {},
+        'Metaculus': {}
+    }
+    
+    # First collect all the rates
     for group in param_groups:
         paths_dict = group_dict[group.name]
-        # Add group header
-        latex_table.append(f"\\multicolumn{{3}}{{l}}{{\\textbf{{{group.name}}}}} \\\\")
-        
         for param_set in group.parameter_sets:
             if param_set.name in paths_dict:
                 paths = paths_dict[param_set.name]
-                # Get year 0 values
-                rate_1y = paths.interest_rates_1y[0,0]
-                rate_30y = paths.interest_rates_30y[0,0]
+                # Get year 1 values (index 1)
+                rate_1y = paths.interest_rates_1y[0,1]
+                rate_30y = paths.interest_rates_30y[0,1]
                 
-                # Replace λ with \lambda in the name
-                latex_name = param_set.name.replace('λ', '\\lambda')
+                # Extract lambda value and source from name
+                if 'Cotra' in param_set.name:
+                    source = 'Cotra'
+                else:
+                    source = 'Metaculus'
                 
-                # Format values as percentages with 2 decimal places
-                row = (
-                    f"{latex_name} & "
-                    f"{rate_1y*100:.2f}\\% & "
-                    f"{rate_30y*100:.2f}\\% \\\\"
-                )
-                latex_table.append(row)
+                lambda_val = param_set.lambda_param
+                rates[source][lambda_val] = (rate_1y, rate_30y)
+    
+    # Now generate the table in the desired order
+    for source in ['Cotra', 'Metaculus']:
+        latex_table.append(f"\\multicolumn{{3}}{{l}}{{\\textbf{{{source}}}}} \\\\")
         
-        # Add spacing between groups
+        # Sort by lambda value
+        for lambda_val in sorted(rates[source].keys()):
+            rate_1y, rate_30y = rates[source][lambda_val]
+            row = (
+                f"\\quad $\\lambda={lambda_val}$ & "
+                f"{rate_1y*100:.2f}\\% & "
+                f"{rate_30y*100:.2f}\\% \\\\"
+            )
+            latex_table.append(row)
         latex_table.append("\\hline")
     
     latex_table.extend([
         "\\end{tabular}",
-        "\\caption{Initial Values by Parameter Set}",
+        "\\caption{Interest Rates in Year 1}",
         "\\label{tab:initial_values}",
         "\\end{table}"
     ])
