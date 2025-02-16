@@ -195,7 +195,7 @@ class TransitionPathVisualizer:
                 style = line_styles[name]
                 for i in indices:
                     label = f'{name} - {"No TAI" if i == 0 else f"TAI in year {i}"}'
-                    plt.plot(data[i, :t_max], style['style'], label=label, linewidth=2, alpha=style['alpha'])
+                    plt.plot(data[i, :t_max], style['style'], label=label, linewidth=2, alpha=style['alpha'], color=style['color'])
                     
             title = titles[idx-1] if titles and idx <= len(titles) else self.variable_properties[var]['title']
             plt.title(title, fontsize=fontsize + 2, pad=20)

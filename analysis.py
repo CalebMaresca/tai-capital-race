@@ -161,11 +161,11 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
         
         # Add horizontal line for stationary equilibrium values
         if var_name == 'savings_rates':
-            plt.axhline(y=s_ss, color='black', linestyle=':', alpha=0.85,
-                       label='Stationary Equilibrium Rate', zorder=-1)
+            plt.plot([0, 25], [s_ss, s_ss], color='black', linestyle=':', alpha=1.0,
+                    label='Stationary Equilibrium Rate', zorder=-1)
         else:
-            plt.axhline(y=r_ss, color='black', linestyle=':', alpha=0.85,
-                       label='Stationary Equilibrium Rate', zorder=-1)
+            plt.plot([0, 25], [r_ss, r_ss], color='black', linestyle=':', alpha=1.0,
+                    label='Stationary Equilibrium Rate', zorder=-1)
         # Refresh legend to include the new line
         plt.legend(fontsize=12)
         
@@ -204,15 +204,15 @@ def generate_plots(param_group: ParameterGroup, paths_dict: Dict, base_output_di
             style = line_styles[name]
             # Only show No TAI path for clarity
             label = f'{name} - No TAI'
-            plt.plot(data[0, :26], style['style'], label=label, linewidth=2, alpha=style['alpha'])
+            plt.plot(data[0, :26], style['style'], label=label, linewidth=2, alpha=style['alpha'], color=style['color'])
         
         # Add horizontal line for stationary equilibrium values
         if var_name == 'savings_rates':
-            plt.axhline(y=s_ss, color='gray', linestyle=':', alpha=0.8,
-                       label='Stationary Equilibrium Rate', zorder=-1)
+            plt.plot([0, 25], [s_ss, s_ss], color='black', linestyle=':', alpha=1.0,
+                    label='Stationary Equilibrium Rate', zorder=-1)
         else:
-            plt.axhline(y=r_ss, color='gray', linestyle=':', alpha=0.8,
-                       label='Stationary Equilibrium Rate', zorder=-1)
+            plt.plot([0, 25], [r_ss, r_ss], color='black', linestyle=':', alpha=1.0,
+                    label='Stationary Equilibrium Rate', zorder=-1)
             # Set shared y-axis limits for interest rate plots
             plt.ylim(global_min, global_max)
             
@@ -254,9 +254,12 @@ def generate_latex_table(param_groups: List[ParameterGroup], group_dict: Dict) -
                 rate_1y = paths.interest_rates_1y[0,0]
                 rate_30y = paths.interest_rates_30y[0,0]
                 
+                # Replace λ with \lambda in the name
+                latex_name = param_set.name.replace('λ', '\\lambda')
+                
                 # Format values as percentages with 2 decimal places
                 row = (
-                    f"{param_set.name} & "
+                    f"{latex_name} & "
                     f"{rate_1y*100:.2f}\\% & "
                     f"{rate_30y*100:.2f}\\% \\\\"
                 )
@@ -320,10 +323,10 @@ def main():
                 )
             ],
             line_styles={
-                'Cotra λ=1': {'style': '-', 'alpha': 1.0},
-                'Metaculus λ=1': {'style': '-', 'alpha': 1.0},
-                'Cotra λ=0': {'style': '--', 'alpha': 0.9},
-                'Metaculus λ=0': {'style': '--', 'alpha': 0.9}
+                'Cotra λ=1': {'style': '-', 'alpha': 1.0, 'color': 'tab:blue'},
+                'Metaculus λ=1': {'style': '-', 'alpha': 1.0, 'color': 'tab:orange'},
+                'Cotra λ=0': {'style': '--', 'alpha': 1.0, 'color': 'tab:blue'},
+                'Metaculus λ=0': {'style': '--', 'alpha': 1.0, 'color': 'tab:orange'}
             }
         ),
         ParameterGroup(
@@ -364,10 +367,10 @@ def main():
                 )
             ],
             line_styles={
-                'Cotra λ=2': {'style': '-', 'alpha': 1.0},
-                'Metaculus λ=2': {'style': '-', 'alpha': 1.0},
-                'Cotra λ=0': {'style': '--', 'alpha': 0.9},
-                'Metaculus λ=0': {'style': '--', 'alpha': 0.9}
+                'Cotra λ=2': {'style': '-', 'alpha': 1.0, 'color': 'tab:blue'},
+                'Metaculus λ=2': {'style': '-', 'alpha': 1.0, 'color': 'tab:orange'},
+                'Cotra λ=0': {'style': '--', 'alpha': 1.0, 'color': 'tab:blue'},
+                'Metaculus λ=0': {'style': '--', 'alpha': 1.0, 'color': 'tab:orange'}
             }
         ),
         ParameterGroup(
@@ -408,10 +411,10 @@ def main():
                 )
             ],
             line_styles={
-                'Cotra λ=4': {'style': '-', 'alpha': 1.0},
-                'Metaculus λ=4': {'style': '-', 'alpha': 1.0},
-                'Cotra λ=0': {'style': '--', 'alpha': 0.9},
-                'Metaculus λ=0': {'style': '--', 'alpha': 0.9}
+                'Cotra λ=4': {'style': '-', 'alpha': 1.0, 'color': 'tab:blue'},
+                'Metaculus λ=4': {'style': '-', 'alpha': 1.0, 'color': 'tab:orange'},
+                'Cotra λ=0': {'style': '--', 'alpha': 1.0, 'color': 'tab:blue'},
+                'Metaculus λ=0': {'style': '--', 'alpha': 1.0, 'color': 'tab:orange'}
             }
         )
     ]
