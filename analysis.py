@@ -291,6 +291,68 @@ def generate_latex_table(param_groups: List[ParameterGroup], group_dict: Dict) -
     
     return "\n".join(latex_table)
 
+def generate_savings_rate_table(param_groups: List[ParameterGroup], group_dict: Dict, plotter: TransitionPathVisualizer) -> str:
+    """Generate a LaTeX table comparing savings rates across parameter sets"""
+    # Get all unique lambda values
+    lambda_values = sorted({param_set.lambda_param 
+                          for group in param_groups 
+                          for param_set in group.parameter_sets})
+    
+    # Create column specification for all lambdas
+    column_spec = "l" + "c" * len(lambda_values)
+    
+    latex_table = [
+        "\\begin{table}[H]",
+        "\\centering",
+        f"\\begin{{tabular}}{{{column_spec}}}",
+        "\\hline",
+        "Source & " + " & ".join([f"$\\lambda={l}$" for l in lambda_values]) + " \\\\",
+        "\\hline"
+    ]
+    
+    # Collect all rates by source and lambda
+    rates = {
+        'Cotra': {},
+        'Metaculus': {}
+    }
+    
+    # First collect all the rates
+    for group in param_groups:
+        paths_dict = group_dict[group.name]
+        for param_set in group.parameter_sets:
+            if param_set.name in paths_dict:
+                paths = paths_dict[param_set.name]
+                # Calculate savings rate for year 0
+                savings_rates = plotter.calculate_savings_rates(paths)
+                rate = savings_rates[0,0]  # Get year 0 rate from No TAI path
+                
+                # Extract lambda value and source from name
+                if 'Cotra' in param_set.name:
+                    source = 'Cotra'
+                else:
+                    source = 'Metaculus'
+                
+                lambda_val = param_set.lambda_param
+                rates[source][lambda_val] = rate
+    
+    # Generate rows
+    for source in ['Cotra', 'Metaculus']:
+        row = [source]
+        for lambda_val in lambda_values:
+            rate = rates[source][lambda_val]
+            row.append(f"{rate*100:.2f}\\%")
+        latex_table.append(" & ".join(row) + " \\\\")
+    
+    latex_table.extend([
+        "\\hline",
+        "\\end{tabular}",
+        "\\caption{Savings Rates in Year 0}",
+        "\\label{tab:savings_rates}",
+        "\\end{table}"
+    ])
+    
+    return "\n".join(latex_table)
+
 def main():
     """Main analysis script"""
     # === USER PARAMETERS ===
@@ -456,12 +518,21 @@ def main():
             print(f"Error processing group {group.name}: {str(e)}")
             continue
     
-    # Generate and save the LaTeX table
+    # Create a plotter instance for savings rate calculations
+    plotter = TransitionPathVisualizer(all_paths_dict['baseline'])
+    
+    # Generate and save the LaTeX tables
     latex_table = generate_latex_table(parameter_groups, all_paths_dict)
     output_path = Path(BASE_OUTPUT_DIR) / "initial_values_table.tex"
     with open(output_path, 'w') as f:
         f.write(latex_table)
     print(f"\nLaTeX table saved to {output_path}")
+    
+    savings_table = generate_savings_rate_table(parameter_groups, all_paths_dict, plotter)
+    output_path = Path(BASE_OUTPUT_DIR) / "savings_rates_table.tex"
+    with open(output_path, 'w') as f:
+        f.write(savings_table)
+    print(f"Savings rates table saved to {output_path}")
 
     print("\nAnalysis complete!")
 
